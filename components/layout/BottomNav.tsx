@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Home, Search, GitCompare, Heart, BookmarkCheck } from "lucide-react"
+import { Home, Search, GitCompare, Heart, BookmarkCheck, PlusCircle } from "lucide-react"
 
 const tabs = [
   { href: "/", icon: Home, label: "Home" },
@@ -10,6 +10,7 @@ const tabs = [
   { href: "/compare", icon: GitCompare, label: "Compare" },
   { href: "/comparisons", icon: BookmarkCheck, label: "Saved" },
   { href: "/wishlist", icon: Heart, label: "Wishlist" },
+  { href: "/admin", icon: PlusCircle, label: "Add Bike" },
 ]
 
 export default function BottomNav() {
@@ -39,8 +40,8 @@ export default function BottomNav() {
                 minHeight: 52,
               }}
             >
-              <Icon size={20} strokeWidth={active ? 2.5 : 1.8} />
-              <span className="text-[10px] font-bold uppercase tracking-wider">{label}</span>
+              <Icon size={18} strokeWidth={active ? 2.5 : 1.8} />
+              <span className="text-[9px] font-bold uppercase tracking-wide leading-none">{label}</span>
             </Link>
           )
         })}
