@@ -2,11 +2,12 @@
 
 import { useEffect, useState, Suspense } from "react"
 import { useSearchParams } from "next/navigation"
-import { X, Plus, Check, Share2, Save, Loader2, BookmarkCheck } from "lucide-react"
+import { X, Plus, Check, Share2, Save, Loader2, BookmarkCheck, AlertCircle } from "lucide-react"
 import Link from "next/link"
 import { Bike } from "@/types/bike"
 import { formatPrice } from "@/lib/utils"
 import ShareModal from "@/components/ui/ShareModal"
+import AICompare from "@/components/bikes/AICompare"
 
 const COMPARE_ROWS = [
   { key: "price_on_road", label: "On-Road (Bangalore)", format: (v: number) => formatPrice(v), better: "lower" },
@@ -71,10 +72,20 @@ function CompareContent() {
     load()
   }, [searchParams])
 
+  const [dupWarning, setDupWarning] = useState("")
+
   function selectBike(slot: number, bike: Bike) {
+    // Prevent duplicate bikes in other slots
+    const alreadyInOtherSlot = bikes.some((b, i) => i !== slot && b?.id === bike.id)
+    if (alreadyInOtherSlot) {
+      setDupWarning(`${bike.name} is already in this comparison!`)
+      setTimeout(() => setDupWarning(""), 3000)
+      return
+    }
     setBikes(prev => { const n = [...prev]; n[slot] = bike; return n })
     setPicking(null)
     setPickSearch("")
+    setDupWarning("")
   }
 
   function removeBike(slot: number) {
@@ -113,7 +124,8 @@ function CompareContent() {
   }
 
   const filteredBikes = allBikes.filter(b => {
-    if (bikes.some(s => s?.id === b.id)) return false
+    // Only exclude bikes already in OTHER slots (not the slot being replaced)
+    if (picking !== null && bikes.some((s, i) => i !== picking && s?.id === b.id)) return false
     if (!pickSearch.trim()) return true
     return b.name.toLowerCase().includes(pickSearch.toLowerCase()) ||
       b.brand.toLowerCase().includes(pickSearch.toLowerCase())
@@ -130,6 +142,14 @@ function CompareContent() {
 
   return (
     <div className="max-w-7xl mx-auto px-3 sm:px-4 py-4 sm:py-8">
+      {/* Duplicate warning toast */}
+      {dupWarning && (
+        <div className="flex items-center gap-2 mb-3 px-4 py-3 text-sm font-bold" style={{ backgroundColor: "#FFF3CD", border: "2px solid var(--amber)", color: "var(--charcoal)" }}>
+          <AlertCircle size={16} style={{ color: "var(--amber)", flexShrink: 0 }} />
+          {dupWarning}
+        </div>
+      )}
+
       {/* Save / Share bar */}
       {activeBikes.length >= 2 && (
         <div className="flex items-center gap-2 mb-4 flex-wrap">
@@ -311,6 +331,9 @@ function CompareContent() {
           <Link href="/bikes" className="retro-btn-coral px-6 py-3 inline-block text-sm uppercase tracking-wider">Browse All Bikes →</Link>
         </div>
       )}
+
+      {/* AI Compare — only shown when 2+ bikes selected */}
+      <AICompare bikes={bikes} />
 
       {/* Share modal */}
       <ShareModal
