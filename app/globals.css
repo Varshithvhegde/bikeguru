@@ -1,26 +1,130 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --cream: #F5F0E8;
+  --warm: #FFF8F0;
+  --coral: #E8583D;
+  --coral-dark: #C94628;
+  --amber: #F5A623;
+  --charcoal: #1A1A1A;
+  --charcoal-mid: #2D2D2D;
+  --charcoal-light: #404040;
+  --off-white: #F8F4EE;
+  --muted: #8B7355;
+  --border: #D4C5A9;
+  --background: var(--cream);
+  --foreground: var(--charcoal);
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-background: var(--cream);
+  --color-foreground: var(--charcoal);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--cream);
+  color: var(--charcoal);
+  -webkit-font-smoothing: antialiased;
 }
+
+h1, h2, h3, h4, h5, h6 {
+  letter-spacing: 0.02em;
+}
+
+.retro-border {
+  border: 2px solid var(--charcoal);
+  box-shadow: 4px 4px 0 var(--charcoal);
+}
+
+.retro-border-coral {
+  border: 2px solid var(--coral);
+  box-shadow: 4px 4px 0 var(--coral);
+}
+
+.retro-btn {
+  border: 2px solid var(--charcoal);
+  box-shadow: 3px 3px 0 var(--charcoal);
+  transition: all 0.1s ease;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.retro-btn:hover {
+  transform: translate(1px, 1px);
+  box-shadow: 2px 2px 0 var(--charcoal);
+}
+
+.retro-btn:active {
+  transform: translate(3px, 3px);
+  box-shadow: 0px 0px 0 var(--charcoal);
+}
+
+.retro-btn-coral {
+  background: var(--coral);
+  color: white;
+  border: 2px solid var(--charcoal);
+  box-shadow: 3px 3px 0 var(--charcoal);
+  transition: all 0.1s ease;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.retro-btn-coral:hover {
+  transform: translate(1px, 1px);
+  box-shadow: 2px 2px 0 var(--charcoal);
+  background: var(--coral-dark);
+}
+
+.card-hover {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.card-hover:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 6px 6px 0 var(--charcoal);
+}
+
+.tag-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border: 1.5px solid var(--charcoal);
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+.scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+
+.chat-scroll::-webkit-scrollbar { width: 4px; }
+.chat-scroll::-webkit-scrollbar-track { background: var(--cream); }
+.chat-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+@keyframes marquee {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+.animate-marquee { animation: marquee 30s linear infinite; }
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.fade-up { animation: fadeUp 0.4s ease forwards; }
+
+@keyframes slideIn {
+  from { opacity: 0; transform: translateX(20px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+.slide-in { animation: slideIn 0.3s ease forwards; }
