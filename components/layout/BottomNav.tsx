@@ -2,14 +2,14 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Home, Search, GitCompare, Heart, Settings } from "lucide-react"
+import { Home, Search, GitCompare, Heart, BookmarkCheck } from "lucide-react"
 
 const tabs = [
   { href: "/", icon: Home, label: "Home" },
   { href: "/bikes", icon: Search, label: "Bikes" },
   { href: "/compare", icon: GitCompare, label: "Compare" },
-  { href: "/wishlist", icon: Heart, label: "Saved" },
-  { href: "/admin", icon: Settings, label: "Admin" },
+  { href: "/comparisons", icon: BookmarkCheck, label: "Saved" },
+  { href: "/wishlist", icon: Heart, label: "Wishlist" },
 ]
 
 export default function BottomNav() {

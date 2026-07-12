@@ -20,16 +20,51 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
-  const id = new URL(req.url).searchParams.get("id")
-  if (!id) return NextResponse.json({ error: "No id" }, { status: 400 })
-
+  const { searchParams } = new URL(req.url)
+  const id = searchParams.get("id")
   const supabase = getServerSupabase()
-  const { data, error } = await supabase
+
+  // Fetch single comparison by id
+  if (id) {
+    const { data, error } = await supabase
+      .from("saved_comparisons")
+      .select("*")
+      .eq("id", id)
+      .single()
+    if (error || !data) return NextResponse.json({ error: "Not found" }, { status: 404 })
+    return NextResponse.json({ comparison: data })
+  }
+
+  // Fetch all comparisons with bike details joined
+  const { data: comparisons, error } = await supabase
     .from("saved_comparisons")
     .select("*")
-    .eq("id", id)
-    .single()
+    .order("created_at", { ascending: false })
 
-  if (error || !data) return NextResponse.json({ error: "Not found" }, { status: 404 })
-  return NextResponse.json({ comparison: data })
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // For each comparison, fetch bike previews
+  const bikeIds = [...new Set(comparisons?.flatMap(c => c.bike_ids) || [])]
+  const { data: bikes } = await supabase
+    .from("bikes")
+    .select("id, name, brand, image_url, price_on_road, engine_cc, category")
+    .in("id", bikeIds)
+
+  const bikeMap = Object.fromEntries((bikes || []).map(b => [b.id, b]))
+
+  const enriched = (comparisons || []).map(c => ({
+    ...c,
+    bikes: c.bike_ids.map((bid: string) => bikeMap[bid]).filter(Boolean),
+  }))
+
+  return NextResponse.json({ comparisons: enriched })
+}
+
+export async function DELETE(req: NextRequest) {
+  const { id } = await req.json()
+  if (!id) return NextResponse.json({ error: "No id" }, { status: 400 })
+  const supabase = getServerSupabase()
+  const { error } = await supabase.from("saved_comparisons").delete().eq("id", id)
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ ok: true })
 }
