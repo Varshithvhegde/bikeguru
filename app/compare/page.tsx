@@ -227,11 +227,26 @@ function CompareContent() {
         ))}
       </div>
 
-      {/* Bike picker — bottom sheet style on mobile */}
+      {/* Bike picker — bottom sheet on mobile, centered modal on desktop */}
       {picking !== null && (
         <>
-          <div className="fixed inset-0 z-40 bg-black/40" onClick={() => { setPicking(null); setPickSearch("") }} />
-          <div className="fixed bottom-0 left-0 right-0 z-50 bg-white slide-up md:static md:slide-in md:mb-6 md:z-auto" style={{ border: "2px solid var(--charcoal)", maxHeight: "70vh", display: "flex", flexDirection: "column" }}>
+          {/* Backdrop — always covers everything */}
+          <div className="fixed inset-0 z-[60] bg-black/50" onClick={() => { setPicking(null); setPickSearch("") }} />
+
+          {/* Panel */}
+          <div
+            className="fixed z-[61] bg-white flex flex-col"
+            style={{
+              /* Mobile: full-width bottom sheet */
+              bottom: 0,
+              left: 0,
+              right: 0,
+              maxHeight: "80vh",
+              border: "3px solid var(--charcoal)",
+              borderBottom: "none",
+              boxShadow: "0 -4px 0 var(--coral)",
+            }}
+          >
             <div className="flex items-center justify-between p-3 flex-shrink-0" style={{ borderBottom: "2px solid var(--charcoal)", backgroundColor: "var(--charcoal)" }}>
               <p className="font-black text-white uppercase text-sm tracking-wider">Select Bike for Slot {picking + 1}</p>
               <button onClick={() => { setPicking(null); setPickSearch("") }} style={{ color: "rgba(255,255,255,0.6)" }}><X size={18} /></button>
@@ -246,15 +261,25 @@ function CompareContent() {
                 style={{ border: "2px solid var(--charcoal)", outline: "none" }}
               />
             </div>
-            <div className="overflow-y-auto flex-1 p-3 grid grid-cols-2 sm:grid-cols-3 gap-2">
+            <div className="overflow-y-auto flex-1 p-3 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
               {filteredBikes.map(b => (
                 <button key={b.id} onClick={() => selectBike(picking, b)}
-                  className="retro-btn p-2 text-left"
-                  style={{ backgroundColor: "var(--cream)" }}
+                  className="retro-btn text-left flex flex-col overflow-hidden press-active"
+                  style={{ backgroundColor: "white" }}
                 >
-                  <p className="text-[10px] uppercase font-bold" style={{ color: "var(--muted)" }}>{b.brand}</p>
-                  <p className="font-black text-sm leading-tight">{b.name}</p>
-                  <p className="font-bold text-sm mt-0.5" style={{ color: "var(--coral)" }}>{formatPrice(b.price_on_road)}</p>
+                  {/* Thumbnail */}
+                  <div className="w-full flex items-center justify-center" style={{ height: 64, backgroundColor: "var(--cream)" }}>
+                    {b.image_url
+                      // eslint-disable-next-line @next/next/no-img-element
+                      ? <img src={b.image_url} alt={b.name} className="w-full h-full object-contain p-1.5" />
+                      : <span className="text-2xl">🏍️</span>
+                    }
+                  </div>
+                  <div className="p-2">
+                    <p className="text-[10px] uppercase font-bold leading-none" style={{ color: "var(--muted)" }}>{b.brand}</p>
+                    <p className="font-black text-xs leading-tight mt-0.5">{b.name}</p>
+                    <p className="font-black text-xs mt-0.5" style={{ color: "var(--coral)", fontFamily: "var(--font-bebas), sans-serif", fontSize: 13 }}>{formatPrice(b.price_on_road)}</p>
+                  </div>
                 </button>
               ))}
             </div>
