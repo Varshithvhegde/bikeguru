@@ -1,0 +1,106 @@
+---
+description: BikeGuru project rules — Next.js 16 Indian bike research app
+globs: ["**/*.tsx", "**/*.ts", "**/*.css"]
+alwaysApply: true
+---
+
+# BikeGuru — Project Context
+
+Indian bike research & comparison app. Budget ≤ ₹2.5L on-road. Prices always use **Bangalore, Karnataka** formula.
+
+## Stack
+- **Next.js 16** (App Router, Turbopack) + TypeScript strict
+- **Supabase** — project ref `yqhssmriyfzfpaswomev` (ap-southeast-1)
+- **OpenAI GPT-4o-mini** — chatbot + AI compare + scraper
+- **Tailwind CSS v4** via `@import "tailwindcss"` — no tailwind.config.ts
+- **lucide-react** for icons, **react-markdown + remark-gfm** for chat
+- Fonts: `Bebas Neue` (headings, `var(--font-bebas)`) + `Space Grotesk` (body, `var(--font-space)`)
+
+## Design System — Retro Bold
+CSS variables in `app/globals.css`:
+```
+--cream: #F5F0E8      (page background)
+--coral: #E8583D      (primary accent, CTAs)
+--amber: #F5A623      (secondary accent, ratings)
+--charcoal: #1A1A1A   (text, borders, headers)
+--muted: #8B7355      (secondary text)
+--border: #D4C5A9     (dividers)
+```
+Key utility classes: `.retro-border`, `.retro-btn`, `.retro-btn-coral`, `.card-hover`, `.tag-pill`, `.press-active`, `.slide-up`, `.skeleton`
+
+Hard box-shadows (`3px 3px 0 var(--charcoal)`), no border-radius, uppercase tracking on labels.
+
+## Pricing Rule — ALWAYS Bangalore Karnataka
+```
+road_tax = engine_cc <= 150 ? 13% : 14%
+insurance = cc <= 150 ? ₹8,000 : cc <= 350 ? ₹12,000 : ₹15,000
+handling = ₹3,500
+on_road = ex_showroom + road_tax + insurance + handling
+```
+Never use Delhi/Mumbai prices. Always label as "Bangalore on-road".
+
+## File Structure
+```
+app/
+  page.tsx              — homepage (server component)
+  bikes/page.tsx        — filterable listing (client, 2-col mobile grid)
+  bikes/[id]/page.tsx   — detail page (server + BikeDetailClient)
+  compare/page.tsx      — compare up to 3 bikes + AI analysis
+  comparisons/page.tsx  — saved comparisons list
+  wishlist/page.tsx     — saved bikes
+  admin/page.tsx        — BikeWale scraper with autocomplete
+  api/
+    bikes/route.ts      — GET bikes with filters
+    chat/route.ts       — OpenAI chatbot
+    compare/route.ts    — POST save, GET all/one, DELETE comparison
+    ai-compare/route.ts — GPT-4o-mini 8-dimension scoring
+    scrape/route.ts     — BikeWale fetch + GPT extraction + Bangalore price
+    wishlist/route.ts   — GET/POST/DELETE wishlist
+components/
+  bikes/BikeCard.tsx        — card with share button
+  bikes/BikeImage.tsx       — img with error fallback
+  bikes/BikeDetailClient.tsx — wishlist + compare + share (client)
+  bikes/FilterPanel.tsx     — sidebar (desktop) / bottom sheet (mobile)
+  bikes/AICompare.tsx       — AI analysis visual with score rings + bars
+  chat/ChatBot.tsx          — floating chatbot with markdown rendering
+  layout/Navbar.tsx         — sticky top nav
+  layout/BottomNav.tsx      — mobile bottom nav (6 tabs)
+  ui/ShareModal.tsx         — WhatsApp/X/copy/native share
+lib/supabase.ts             — client + server supabase helpers
+lib/utils.ts                — cn(), formatPrice(), formatPriceExact(), getSessionId()
+types/bike.ts               — Bike interface + FilterState
+```
+
+## Supabase Tables
+- `bikes` — all bike specs + image_url from imgd.aeplcdn.com CDN
+- `wishlist` — session_id + bike_id
+- `saved_comparisons` — id (short), name, bike_ids[], created_at
+- `compare_list` — session_id + bike_id
+- `chat_history` — session_id + role + content
+
+## Mobile-First Rules
+- Bottom nav fixed at bottom (`z-40`), 6 tabs, `md:hidden`
+- Chat button: `bottom-20 md:bottom-6` to clear bottom nav
+- Filters: bottom sheet on mobile (`slide-up`, `z-50`), sidebar on desktop
+- Bike grid: `grid-cols-2` mobile, `xl:grid-cols-3` desktop
+- Modals/pickers always use `z-[60]+` with backdrop to avoid greyout
+- `press-active` class on all tappable elements
+- Safe area: `paddingBottom: env(safe-area-inset-bottom)`
+
+## Key Patterns
+- Server components fetch from Supabase directly via `getServerSupabase()`
+- Client components use `fetch('/api/...')`
+- Images: plain `<img>` tags (not next/image) with `onError` fallback to 🏍️ emoji
+- `getSessionId()` from `lib/utils.ts` for anonymous session tracking
+- All commits by **Varshithvhegde** `<varshithvhegde@users.noreply.github.com>`
+
+## BikeWale Image CDN Pattern
+`https://imgd.aeplcdn.com/664x374/n/cw/ec/{NUMERIC_ID}/{slug}-right-side-view.jpeg`
+Some bikes use `.png` extension. Verify URLs before saving.
+
+## DO NOT
+- Add `border-radius` anywhere — design is sharp/retro
+- Use `next/image` for external CDN images (gets 403)
+- Quote non-Bangalore on-road prices
+- Add scooters (removed intentionally)
+- Use `Twitter` icon from lucide-react (renamed — use `𝕏` text or XIcon)
