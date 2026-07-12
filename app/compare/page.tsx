@@ -2,22 +2,26 @@
 
 import { useEffect, useState, Suspense } from "react"
 import { useSearchParams } from "next/navigation"
-import { X, Plus, Check } from "lucide-react"
+import { X, Plus, Check, Share2, Save, Loader2, BookmarkCheck } from "lucide-react"
 import Link from "next/link"
 import { Bike } from "@/types/bike"
 import { formatPrice } from "@/lib/utils"
+import ShareModal from "@/components/ui/ShareModal"
 
 const COMPARE_ROWS = [
-  { key: "price_on_road", label: "On-Road Price", format: (v: number) => formatPrice(v), better: "lower" },
-  { key: "engine_cc", label: "Engine (cc)", format: (v: number) => `${v}cc`, better: "higher" },
+  { key: "price_on_road", label: "On-Road (Bangalore)", format: (v: number) => formatPrice(v), better: "lower" },
+  { key: "price_ex_showroom", label: "Ex-Showroom", format: (v: number) => formatPrice(v), better: "lower" },
+  { key: "engine_cc", label: "Engine", format: (v: number) => `${v}cc`, better: "higher" },
+  { key: "max_power", label: "Max Power", format: (v: unknown) => String(v), better: "none" },
+  { key: "max_torque", label: "Max Torque", format: (v: unknown) => String(v), better: "none" },
   { key: "mileage_kmpl", label: "Mileage", format: (v: number) => `${v} kmpl`, better: "higher" },
   { key: "top_speed", label: "Top Speed", format: (v: number) => `${v} km/h`, better: "higher" },
   { key: "weight_kg", label: "Weight", format: (v: number) => `${v} kg`, better: "lower" },
   { key: "fuel_tank_liters", label: "Fuel Tank", format: (v: number) => `${v} L`, better: "higher" },
   { key: "seat_height_mm", label: "Seat Height", format: (v: number) => `${v} mm`, better: "none" },
   { key: "ground_clearance_mm", label: "Ground Clearance", format: (v: number) => `${v} mm`, better: "higher" },
-  { key: "abs", label: "ABS", format: (v: number) => v === 2 ? "Dual" : v === 1 ? "Single" : "None", better: "none" },
-  { key: "rating", label: "Rating", format: (v: number) => `${v}/5`, better: "higher" },
+  { key: "abs", label: "ABS", format: (v: number) => v === 2 ? "Dual Channel" : v === 1 ? "Single" : "None", better: "none" },
+  { key: "rating", label: "User Rating", format: (v: number) => `${v} / 5`, better: "higher" },
 ]
 
 function CompareContent() {
@@ -26,215 +30,296 @@ function CompareContent() {
   const [allBikes, setAllBikes] = useState<Bike[]>([])
   const [loading, setLoading] = useState(true)
   const [picking, setPicking] = useState<number | null>(null)
+  const [pickSearch, setPickSearch] = useState("")
+  const [saving, setSaving] = useState(false)
+  const [savedId, setSavedId] = useState<string | null>(null)
+  const [shareOpen, setShareOpen] = useState(false)
+  const [saveName, setSaveName] = useState("")
+  const [showNameInput, setShowNameInput] = useState(false)
 
   useEffect(() => {
-    const idsParam = searchParams.get("ids")
-    const ids = idsParam ? idsParam.split(",").slice(0, 3) : []
+    async function load() {
+      const { bikes: all } = await fetch("/api/bikes").then(r => r.json())
+      setAllBikes(all || [])
 
-    fetch("/api/bikes")
-      .then((r) => r.json())
-      .then(({ bikes: all }) => {
-        setAllBikes(all || [])
-        const loaded: (Bike | null)[] = [null, null, null]
+      const loaded: (Bike | null)[] = [null, null, null]
+
+      // Load from saved comparison
+      const savedParam = searchParams.get("saved")
+      if (savedParam) {
+        const { comparison } = await fetch(`/api/compare?id=${savedParam}`).then(r => r.json()).catch(() => ({}))
+        if (comparison?.bike_ids) {
+          comparison.bike_ids.slice(0, 3).forEach((id: string, i: number) => {
+            const found = all?.find((b: Bike) => b.id === id)
+            if (found) loaded[i] = found
+          })
+          setSavedId(savedParam)
+        }
+      } else {
+        // Load from URL ids param
+        const idsParam = searchParams.get("ids")
+        const ids = idsParam ? idsParam.split(",").slice(0, 3) : []
         ids.forEach((id, i) => {
           const found = all?.find((b: Bike) => b.id === id)
           if (found) loaded[i] = found
         })
-        setBikes(loaded)
-        setLoading(false)
-      })
+      }
+
+      setBikes(loaded)
+      setLoading(false)
+    }
+    load()
   }, [searchParams])
 
   function selectBike(slot: number, bike: Bike) {
-    setBikes((prev) => {
-      const next = [...prev]
-      next[slot] = bike
-      return next
-    })
+    setBikes(prev => { const n = [...prev]; n[slot] = bike; return n })
     setPicking(null)
+    setPickSearch("")
   }
 
   function removeBike(slot: number) {
-    setBikes((prev) => {
-      const next = [...prev]
-      next[slot] = null
-      return next
-    })
+    setBikes(prev => { const n = [...prev]; n[slot] = null; return n })
+  }
+
+  async function saveComparison() {
+    const activeBikes = bikes.filter(Boolean) as Bike[]
+    if (activeBikes.length < 2) return
+    setSaving(true)
+    try {
+      const res = await fetch("/api/compare", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          bike_ids: activeBikes.map(b => b.id),
+          name: saveName || activeBikes.map(b => b.name).join(" vs "),
+        }),
+      })
+      const { id } = await res.json()
+      setSavedId(id)
+      setShowNameInput(false)
+      // Update URL without reload
+      window.history.replaceState({}, "", `/compare?saved=${id}`)
+    } finally {
+      setSaving(false)
+    }
   }
 
   const activeBikes = bikes.filter(Boolean) as Bike[]
 
-  function getBestSlot(key: string, direction: string): number {
+  function getBestIdx(key: string, direction: string): number {
     if (direction === "none" || activeBikes.length < 2) return -1
-    const values = activeBikes.map((b) => (b as unknown as Record<string, unknown>)[key] as number)
-    if (direction === "higher") return values.indexOf(Math.max(...values))
-    if (direction === "lower") return values.indexOf(Math.min(...values))
-    return -1
+    const vals = activeBikes.map(b => Number((b as unknown as Record<string, unknown>)[key]) || 0)
+    return direction === "higher" ? vals.indexOf(Math.max(...vals)) : vals.indexOf(Math.min(...vals))
   }
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-96">
-        <div className="text-2xl" style={{ fontFamily: "var(--font-bebas), sans-serif" }}>
-          LOADING COMPARE...
-        </div>
+  const filteredBikes = allBikes.filter(b => {
+    if (bikes.some(s => s?.id === b.id)) return false
+    if (!pickSearch.trim()) return true
+    return b.name.toLowerCase().includes(pickSearch.toLowerCase()) ||
+      b.brand.toLowerCase().includes(pickSearch.toLowerCase())
+  })
+
+  if (loading) return (
+    <div className="flex items-center justify-center min-h-64 py-20">
+      <div className="flex flex-col items-center gap-3">
+        <Loader2 size={32} className="animate-spin" style={{ color: "var(--coral)" }} />
+        <p style={{ fontFamily: "var(--font-bebas), sans-serif", fontSize: 20 }}>LOADING...</p>
       </div>
-    )
-  }
+    </div>
+  )
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-8">
-      {/* Slot selector */}
-      <div className="grid grid-cols-3 gap-4 mb-8">
+    <div className="max-w-7xl mx-auto px-3 sm:px-4 py-4 sm:py-8">
+      {/* Save / Share bar */}
+      {activeBikes.length >= 2 && (
+        <div className="flex items-center gap-2 mb-4 flex-wrap">
+          {savedId ? (
+            <>
+              <div className="flex items-center gap-2 px-3 py-1.5 text-xs font-black uppercase" style={{ backgroundColor: "#4CAF50", color: "white" }}>
+                <BookmarkCheck size={14} /> Saved
+              </div>
+              <button
+                onClick={() => setShareOpen(true)}
+                className="retro-btn-coral px-4 py-1.5 text-xs uppercase tracking-wider flex items-center gap-1.5"
+              >
+                <Share2 size={14} /> Share Comparison
+              </button>
+            </>
+          ) : showNameInput ? (
+            <div className="flex items-center gap-2 flex-1">
+              <input
+                value={saveName}
+                onChange={e => setSaveName(e.target.value)}
+                placeholder={activeBikes.map(b => b.name).join(" vs ")}
+                className="flex-1 px-3 py-1.5 text-sm min-w-0"
+                style={{ border: "2px solid var(--charcoal)", outline: "none" }}
+                autoFocus
+                onKeyDown={e => e.key === "Enter" && saveComparison()}
+              />
+              <button onClick={saveComparison} disabled={saving} className="retro-btn-coral px-4 py-1.5 text-xs uppercase tracking-wider flex items-center gap-1.5">
+                {saving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />} Save
+              </button>
+              <button onClick={() => setShowNameInput(false)} style={{ color: "var(--muted)" }}><X size={16} /></button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setShowNameInput(true)}
+              className="retro-btn px-4 py-1.5 text-xs uppercase tracking-wider flex items-center gap-1.5"
+              style={{ backgroundColor: "white" }}
+            >
+              <Save size={14} /> Save Comparison
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Bike slots — horizontal scroll on mobile */}
+      <div className="grid grid-cols-3 gap-2 sm:gap-4 mb-4 sm:mb-8">
         {bikes.map((bike, slot) => (
           <div key={slot}>
             {bike ? (
-              <div className="retro-border bg-white p-4 relative">
-                <button
-                  onClick={() => removeBike(slot)}
-                  className="absolute top-2 right-2 w-6 h-6 flex items-center justify-center retro-btn"
-                  style={{ backgroundColor: "var(--coral)", color: "white" }}
-                >
-                  <X size={12} />
+              <div className="retro-border bg-white relative">
+                <button onClick={() => removeBike(slot)} className="absolute top-1 right-1 w-6 h-6 flex items-center justify-center retro-btn z-10" style={{ backgroundColor: "var(--coral)", color: "white" }}>
+                  <X size={10} />
                 </button>
-                <div
-                  className="w-full h-28 flex items-center justify-center mb-3 overflow-hidden"
-                  style={{ backgroundColor: "var(--cream)" }}
-                >
-                  {bike.image_url ? (
+                <div className="h-20 sm:h-28 flex items-center justify-center overflow-hidden p-1" style={{ backgroundColor: "var(--cream)" }}>
+                  {bike.image_url
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={bike.image_url} alt={bike.name} className="w-full h-full object-contain p-2" />
-                  ) : (
-                    <span className="text-5xl">🏍️</span>
-                  )}
+                    ? <img src={bike.image_url} alt={bike.name} className="w-full h-full object-contain" />
+                    : <span className="text-4xl">🏍️</span>
+                  }
                 </div>
-                <p className="text-xs font-bold uppercase" style={{ color: "var(--muted)" }}>{bike.brand}</p>
-                <p className="text-xl" style={{ fontFamily: "var(--font-bebas), sans-serif" }}>{bike.name}</p>
-                <p
-                  className="text-2xl font-black"
-                  style={{ fontFamily: "var(--font-bebas), sans-serif", color: "var(--coral)" }}
-                >
-                  {formatPrice(bike.price_on_road)}
-                </p>
+                <div className="p-2 sm:p-3">
+                  <p className="text-[10px] font-bold uppercase leading-none" style={{ color: "var(--muted)" }}>{bike.brand}</p>
+                  <p className="font-black leading-tight text-sm sm:text-base" style={{ fontFamily: "var(--font-bebas), sans-serif" }}>{bike.name}</p>
+                  <p className="font-black text-sm sm:text-xl leading-none mt-0.5" style={{ fontFamily: "var(--font-bebas), sans-serif", color: "var(--coral)" }}>
+                    {formatPrice(bike.price_on_road)}
+                  </p>
+                </div>
               </div>
             ) : (
-              <button
-                onClick={() => setPicking(slot)}
-                className="w-full retro-border bg-white p-4 flex flex-col items-center gap-2 text-sm font-bold uppercase tracking-wider card-hover"
-                style={{ minHeight: 160, color: "var(--muted)" }}
-              >
-                <Plus size={24} style={{ color: "var(--coral)" }} />
-                Add Bike
+              <button onClick={() => setPicking(slot)} className="w-full h-full retro-border bg-white flex flex-col items-center justify-center gap-2 card-hover press-active" style={{ minHeight: 120 }}>
+                <Plus size={20} style={{ color: "var(--coral)" }} />
+                <span className="text-[10px] sm:text-xs font-black uppercase tracking-wider" style={{ color: "var(--muted)" }}>Add Bike</span>
               </button>
             )}
           </div>
         ))}
       </div>
 
-      {/* Bike picker */}
+      {/* Bike picker — bottom sheet style on mobile */}
       {picking !== null && (
-        <div className="mb-8 p-4 bg-white" style={{ border: "2px solid var(--charcoal)" }}>
-          <div className="flex items-center justify-between mb-4">
-            <p className="font-black uppercase tracking-wider">Select Bike for Slot {picking + 1}</p>
-            <button onClick={() => setPicking(null)} style={{ color: "var(--muted)" }}>
-              <X size={18} />
-            </button>
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 max-h-64 overflow-y-auto">
-            {allBikes
-              .filter((b) => !bikes.some((selected) => selected?.id === b.id))
-              .map((b) => (
-                <button
-                  key={b.id}
-                  onClick={() => selectBike(picking, b)}
-                  className="retro-btn p-3 text-left text-sm"
+        <>
+          <div className="fixed inset-0 z-40 bg-black/40" onClick={() => { setPicking(null); setPickSearch("") }} />
+          <div className="fixed bottom-0 left-0 right-0 z-50 bg-white slide-up md:static md:slide-in md:mb-6 md:z-auto" style={{ border: "2px solid var(--charcoal)", maxHeight: "70vh", display: "flex", flexDirection: "column" }}>
+            <div className="flex items-center justify-between p-3 flex-shrink-0" style={{ borderBottom: "2px solid var(--charcoal)", backgroundColor: "var(--charcoal)" }}>
+              <p className="font-black text-white uppercase text-sm tracking-wider">Select Bike for Slot {picking + 1}</p>
+              <button onClick={() => { setPicking(null); setPickSearch("") }} style={{ color: "rgba(255,255,255,0.6)" }}><X size={18} /></button>
+            </div>
+            <div className="p-3 flex-shrink-0" style={{ borderBottom: "1px solid var(--border)" }}>
+              <input
+                autoFocus
+                value={pickSearch}
+                onChange={e => setPickSearch(e.target.value)}
+                placeholder="Search bikes..."
+                className="w-full px-3 py-2 text-sm"
+                style={{ border: "2px solid var(--charcoal)", outline: "none" }}
+              />
+            </div>
+            <div className="overflow-y-auto flex-1 p-3 grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {filteredBikes.map(b => (
+                <button key={b.id} onClick={() => selectBike(picking, b)}
+                  className="retro-btn p-2 text-left"
                   style={{ backgroundColor: "var(--cream)" }}
                 >
-                  <p className="text-xs uppercase" style={{ color: "var(--muted)" }}>{b.brand}</p>
-                  <p className="font-black">{b.name}</p>
-                  <p style={{ color: "var(--coral)", fontWeight: 700 }}>{formatPrice(b.price_on_road)}</p>
+                  <p className="text-[10px] uppercase font-bold" style={{ color: "var(--muted)" }}>{b.brand}</p>
+                  <p className="font-black text-sm leading-tight">{b.name}</p>
+                  <p className="font-bold text-sm mt-0.5" style={{ color: "var(--coral)" }}>{formatPrice(b.price_on_road)}</p>
                 </button>
               ))}
+            </div>
           </div>
-        </div>
+        </>
       )}
 
       {/* Comparison table */}
-      {activeBikes.length >= 2 && (
+      {activeBikes.length >= 2 ? (
         <div className="bg-white retro-border overflow-hidden">
-          <div className="px-4 py-3" style={{ backgroundColor: "var(--charcoal)" }}>
-            <p className="text-xl text-white" style={{ fontFamily: "var(--font-bebas), sans-serif" }}>
-              FULL COMPARISON
-            </p>
+          <div className="px-4 py-3 flex items-center justify-between" style={{ backgroundColor: "var(--charcoal)" }}>
+            <p className="text-xl text-white" style={{ fontFamily: "var(--font-bebas), sans-serif" }}>FULL COMPARISON</p>
+            <button onClick={() => setShareOpen(true)} className="flex items-center gap-1.5 text-xs font-bold uppercase px-3 py-1.5" style={{ backgroundColor: "var(--coral)", color: "white" }}>
+              <Share2 size={12} /> Share
+            </button>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full">
-              <colgroup>
-                <col className="w-40" />
-                {activeBikes.map((_, i) => <col key={i} />)}
-              </colgroup>
+            <table className="w-full" style={{ minWidth: 340 }}>
               <tbody>
                 {COMPARE_ROWS.map((row, ri) => {
-                  const bestSlot = getBestSlot(row.key, row.better)
+                  const bestIdx = getBestIdx(row.key, row.better)
                   return (
-                    <tr
-                      key={row.key}
-                      style={{
-                        borderBottom: "1px solid var(--border)",
-                        backgroundColor: ri % 2 === 0 ? "white" : "var(--cream)",
-                      }}
-                    >
-                      <td
-                        className="px-4 py-3 text-xs font-black uppercase tracking-wider"
-                        style={{ color: "var(--muted)", minWidth: 140 }}
-                      >
+                    <tr key={row.key} style={{ borderBottom: "1px solid var(--border)", backgroundColor: ri % 2 === 0 ? "white" : "var(--cream)" }}>
+                      <td className="px-3 py-2.5 text-[11px] font-black uppercase tracking-wider w-28 sm:w-36 flex-shrink-0" style={{ color: "var(--muted)" }}>
                         {row.label}
                       </td>
                       {activeBikes.map((bike, bi) => {
                         const val = (bike as unknown as Record<string, unknown>)[row.key]
-                        const isBest = bestSlot === bi
+                        const isBest = bestIdx === bi
                         return (
-                          <td
-                            key={bike.id}
-                            className="px-4 py-3 text-sm font-bold text-center"
-                            style={{
-                              backgroundColor: isBest ? "rgba(76,175,80,0.1)" : undefined,
-                              color: isBest ? "#4CAF50" : "var(--charcoal)",
-                            }}
-                          >
+                          <td key={bike.id} className="px-3 py-2.5 text-xs sm:text-sm font-bold text-center" style={{ backgroundColor: isBest ? "rgba(76,175,80,0.1)" : undefined, color: isBest ? "#4CAF50" : "var(--charcoal)" }}>
                             {row.format(val as number)}
-                            {isBest && (
-                              <Check size={12} className="inline ml-1" style={{ color: "#4CAF50" }} />
-                            )}
+                            {isBest && <Check size={10} className="inline ml-1" style={{ color: "#4CAF50" }} />}
                           </td>
                         )
                       })}
-                      {activeBikes.length < 3 && (
-                        <td className="px-4 py-3 text-center text-xs" style={{ color: "var(--border)" }}>—</td>
-                      )}
+                      {activeBikes.length < 3 && <td className="px-3 py-2.5 text-center text-xs" style={{ color: "var(--border)" }}>—</td>}
                     </tr>
                   )
                 })}
               </tbody>
             </table>
           </div>
+
+          {/* Pros/cons per bike */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-0" style={{ borderTop: "2px solid var(--charcoal)" }}>
+            {activeBikes.map((bike, i) => (
+              <div key={bike.id} className="p-4" style={{ borderRight: i < activeBikes.length - 1 ? "1px solid var(--border)" : "none" }}>
+                <p className="font-black text-sm uppercase mb-2" style={{ fontFamily: "var(--font-bebas), sans-serif", fontSize: 16 }}>{bike.name}</p>
+                {bike.pros?.slice(0, 3).map(p => (
+                  <div key={p} className="flex gap-1.5 items-start mb-1 text-xs">
+                    <Check size={11} className="flex-shrink-0 mt-0.5" style={{ color: "#4CAF50" }} />
+                    <span>{p}</span>
+                  </div>
+                ))}
+                {bike.cons?.slice(0, 2).map(c => (
+                  <div key={c} className="flex gap-1.5 items-start mb-1 text-xs">
+                    <X size={11} className="flex-shrink-0 mt-0.5" style={{ color: "var(--coral)" }} />
+                    <span style={{ color: "var(--muted)" }}>{c}</span>
+                  </div>
+                ))}
+                <Link href={`/bikes/${bike.id}`} className="inline-block mt-2 text-[10px] font-black uppercase tracking-wider px-2 py-1" style={{ border: "1.5px solid var(--charcoal)", backgroundColor: "var(--cream)" }}>
+                  Full Details →
+                </Link>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div className="text-center py-12 retro-border bg-white">
+          <div className="text-5xl mb-4">⚡</div>
+          <p className="text-3xl" style={{ fontFamily: "var(--font-bebas), sans-serif" }}>SELECT AT LEAST 2 BIKES</p>
+          <p className="text-sm mt-2 mb-6" style={{ color: "var(--muted)" }}>Tap the + slots above to add bikes</p>
+          <Link href="/bikes" className="retro-btn-coral px-6 py-3 inline-block text-sm uppercase tracking-wider">Browse All Bikes →</Link>
         </div>
       )}
 
-      {activeBikes.length < 2 && (
-        <div className="text-center py-16 retro-border bg-white">
-          <div style={{ fontSize: 60 }}>⚡</div>
-          <p className="text-3xl mt-4" style={{ fontFamily: "var(--font-bebas), sans-serif" }}>
-            SELECT AT LEAST 2 BIKES
-          </p>
-          <p className="text-sm mt-2" style={{ color: "var(--muted)" }}>
-            Use the slots above to pick bikes to compare
-          </p>
-          <Link href="/bikes" className="retro-btn-coral px-6 py-3 inline-block mt-6 text-sm uppercase tracking-wider">
-            Browse All Bikes →
-          </Link>
-        </div>
-      )}
+      {/* Share modal */}
+      <ShareModal
+        open={shareOpen}
+        onClose={() => setShareOpen(false)}
+        title={activeBikes.map(b => b.name).join(" vs ")}
+        url={savedId ? `/compare?saved=${savedId}` : `/compare?ids=${activeBikes.map(b => b.id).join(",")}`}
+        description={`Bangalore on-road prices compared — ${activeBikes.map(b => formatPrice(b.price_on_road)).join(" / ")}`}
+      />
     </div>
   )
 }
@@ -242,24 +327,15 @@ function CompareContent() {
 export default function ComparePage() {
   return (
     <div style={{ backgroundColor: "var(--cream)", minHeight: "100vh" }}>
-      {/* Header */}
       <div style={{ backgroundColor: "var(--charcoal)", borderBottom: "3px solid var(--coral)" }}>
-        <div className="max-w-7xl mx-auto px-4 py-8">
-          <h1
-            className="text-5xl md:text-7xl text-white"
-            style={{ fontFamily: "var(--font-bebas), sans-serif" }}
-          >
-            COMPARE BIKES
-            <span style={{ color: "var(--coral)" }}>.</span>
+        <div className="max-w-7xl mx-auto px-4 py-6 sm:py-8">
+          <h1 className="text-5xl sm:text-7xl text-white" style={{ fontFamily: "var(--font-bebas), sans-serif" }}>
+            COMPARE BIKES<span style={{ color: "var(--coral)" }}>.</span>
           </h1>
-          <p style={{ color: "rgba(255,255,255,0.6)" }}>Select up to 3 bikes to compare side-by-side</p>
+          <p className="text-sm" style={{ color: "rgba(255,255,255,0.6)" }}>Side-by-side · Save · Share</p>
         </div>
       </div>
-      <Suspense fallback={
-        <div className="flex items-center justify-center min-h-96">
-          <p className="text-2xl" style={{ fontFamily: "var(--font-bebas), sans-serif" }}>LOADING...</p>
-        </div>
-      }>
+      <Suspense fallback={<div className="flex items-center justify-center min-h-64"><Loader2 size={32} className="animate-spin" style={{ color: "var(--coral)" }} /></div>}>
         <CompareContent />
       </Suspense>
     </div>

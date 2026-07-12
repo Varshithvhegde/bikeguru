@@ -4,9 +4,10 @@ import { Bike } from "@/types/bike"
 import { formatPrice, formatPriceExact } from "@/lib/utils"
 import Link from "next/link"
 import BikeImage from "@/components/bikes/BikeImage"
+import BikeDetailClient from "@/components/bikes/BikeDetailClient"
 import {
   ArrowLeft, Star, Zap, Droplet, Weight, Gauge, Fuel, ArrowUpDown,
-  Shield, Check, X, GitCompare, Heart
+  Shield, Check, X, GitCompare
 } from "lucide-react"
 
 async function getBike(id: string): Promise<Bike | null> {
@@ -205,20 +206,7 @@ export default async function BikeDetailPage({
             </div>
 
             {/* Actions */}
-            <div className="flex gap-3">
-              <Link
-                href={`/compare?ids=${bike.id}`}
-                className="retro-btn flex-1 py-3 text-sm uppercase tracking-wider flex items-center justify-center gap-2"
-                style={{ backgroundColor: "white" }}
-              >
-                <GitCompare size={16} /> Add to Compare
-              </Link>
-              <button
-                className="retro-btn-coral flex-1 py-3 text-sm uppercase tracking-wider flex items-center justify-center gap-2"
-              >
-                <Heart size={16} /> Wishlist
-              </button>
-            </div>
+            <BikeDetailClient bike={bike} />
           </div>
         </div>
 

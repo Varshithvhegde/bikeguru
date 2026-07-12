@@ -237,9 +237,10 @@ export default function ChatBot() {
   return (
     <>
       {/* ── Floating trigger button ── */}
+      {/* On mobile: sits above bottom nav (bottom-20). On desktop: bottom-6 */}
       <button
         onClick={() => setOpen(!open)}
-        className="fixed bottom-6 right-6 z-50 flex items-center gap-2.5 px-4 py-3"
+        className="fixed bottom-20 md:bottom-6 right-4 md:right-6 z-50 flex items-center gap-2 md:gap-2.5 px-3 md:px-4 py-2.5 md:py-3"
         style={{
           backgroundColor: open ? "var(--charcoal)" : "var(--coral)",
           border: "2.5px solid var(--charcoal)",
@@ -273,10 +274,16 @@ export default function ChatBot() {
       {/* ── Chat window ── */}
       {open && (
         <div
-          className="fixed bottom-24 right-6 z-50 flex flex-col slide-in"
+          className="fixed z-50 flex flex-col slide-in"
           style={{
-            width: "min(420px, calc(100vw - 24px))",
-            height: "min(580px, calc(100vh - 110px))",
+            /* Mobile: full-width sheet just above bottom nav */
+            bottom: "calc(5rem + 56px)", /* above chat button + bottom nav */
+            right: "1rem",
+            left: "1rem",
+            height: "min(520px, calc(100vh - 180px))",
+            /* Desktop override via media query not possible inline — use clamp */
+            width: "min(100%, 420px)",
+            marginLeft: "auto",
             backgroundColor: "var(--cream)",
             border: "3px solid var(--charcoal)",
             boxShadow: "8px 8px 0 var(--charcoal)",

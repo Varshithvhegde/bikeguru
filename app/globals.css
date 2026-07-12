@@ -128,3 +128,25 @@ h1, h2, h3, h4, h5, h6 {
   to { opacity: 1; transform: translateX(0); }
 }
 .slide-in { animation: slideIn 0.3s ease forwards; }
+
+/* Mobile safe area + touch */
+* { -webkit-tap-highlight-color: transparent; }
+input, button, select, textarea { touch-action: manipulation; }
+html { -webkit-text-size-adjust: 100%; }
+
+/* Bottom sheet slide up */
+@keyframes slideUp {
+  from { transform: translateY(100%); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+.slide-up { animation: slideUp 0.28s cubic-bezier(.32,.72,0,1) forwards; }
+
+/* Skeleton pulse */
+@keyframes skeleton {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+.skeleton { animation: skeleton 1.4s ease-in-out infinite; background: #E8E3D8; }
+
+/* Active press feedback for mobile */
+.press-active:active { transform: translate(2px,2px); box-shadow: none !important; }
