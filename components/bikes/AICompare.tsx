@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Loader2, Sparkles, Trophy, TrendingUp, ChevronDown, ChevronUp, RotateCcw } from "lucide-react"
 import { Bike } from "@/types/bike"
 import { formatPrice } from "@/lib/utils"
@@ -124,25 +124,58 @@ export default function AICompare({ bikes }: AICompareProps) {
   const [report, setReport] = useState<Report | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
+  const [fromCache, setFromCache] = useState(false)
   const [expanded, setExpanded] = useState({ categories: true, usecases: true, personas: true })
 
   const activeBikes = bikes.filter(Boolean) as Bike[]
+  const bikeKey = activeBikes.map(b => b.id).sort().join("_")
 
-  async function runAnalysis() {
+  // Auto-load cached result whenever bike selection changes
+  useEffect(() => {
+    if (activeBikes.length < 2) { setReport(null); return }
+    let cancelled = false
+
+    async function checkCache() {
+      setLoading(true)
+      setReport(null)
+      setError("")
+      try {
+        const res = await fetch("/api/ai-compare", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          // Pass force_refresh=false — only reads cache, doesn't call GPT
+          body: JSON.stringify({ bike_ids: activeBikes.map(b => b.id), cache_only: true }),
+        })
+        const data = await res.json()
+        if (cancelled) return
+        if (data.report) { setReport(data.report); setFromCache(true) }
+        // If no cache, report stays null → button is shown
+      } catch { /* silently ignore */ } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+
+    checkCache()
+    return () => { cancelled = true }
+  }, [bikeKey]) // eslint-disable-line
+
+  async function runAnalysis(forceRefresh = false) {
     if (activeBikes.length < 2) return
     setLoading(true)
     setError("")
     setReport(null)
+    setFromCache(false)
 
     try {
       const res = await fetch("/api/ai-compare", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bike_ids: activeBikes.map(b => b.id) }),
+        body: JSON.stringify({ bike_ids: activeBikes.map(b => b.id), force_refresh: forceRefresh }),
       })
       const data = await res.json()
       if (data.error) { setError(data.error); return }
       setReport(data.report)
+      setFromCache(data.cached === true)
     } catch (e) {
       setError(String(e))
     } finally {
@@ -156,7 +189,7 @@ export default function AICompare({ bikes }: AICompareProps) {
     <div className="mt-6">
       {!report && !loading && (
         <button
-          onClick={runAnalysis}
+          onClick={() => runAnalysis(false)}
           className="w-full flex items-center justify-center gap-3 py-4 text-sm uppercase tracking-wider font-black press-active transition-all"
           style={{
             backgroundColor: "var(--charcoal)",
@@ -182,10 +215,9 @@ export default function AICompare({ bikes }: AICompareProps) {
               AI IS ANALYSING...
             </p>
             <p className="text-xs mt-1" style={{ color: "rgba(255,255,255,0.5)" }}>
-              Scoring {activeBikes.length} bikes across 8 dimensions
+              Checking cache → scoring {activeBikes.length} bikes across 8 dimensions
             </p>
           </div>
-          {/* Animated bike names */}
           <div className="flex gap-3">
             {activeBikes.map((b, i) => (
               <span key={b.id} className="text-xs font-bold px-2 py-1" style={{ backgroundColor: BIKE_COLORS[i], color: "white" }}>
@@ -213,9 +245,14 @@ export default function AICompare({ bikes }: AICompareProps) {
             <div className="absolute inset-0 opacity-10" style={{ backgroundImage: "linear-gradient(var(--coral) 1px,transparent 1px),linear-gradient(90deg,var(--coral) 1px,transparent 1px)", backgroundSize: "32px 32px" }} />
 
             <div className="relative p-5">
-              <div className="flex items-center gap-2 mb-3">
+              <div className="flex items-center gap-2 mb-3 flex-wrap">
                 <Sparkles size={16} style={{ color: "var(--amber)" }} />
                 <span className="text-xs font-black uppercase tracking-widest" style={{ color: "var(--amber)" }}>AI Verdict</span>
+                {fromCache && (
+                  <span className="flex items-center gap-1 text-[10px] font-black uppercase px-2 py-0.5" style={{ backgroundColor: "rgba(76,175,80,0.2)", color: "#4CAF50", border: "1px solid #4CAF50" }}>
+                    ⚡ Cached — instant
+                  </span>
+                )}
               </div>
 
               {/* Winner */}
@@ -390,14 +427,23 @@ export default function AICompare({ bikes }: AICompareProps) {
             )}
           </div>
 
-          {/* Re-run */}
-          <button
-            onClick={runAnalysis}
-            className="w-full flex items-center justify-center gap-2 py-2.5 text-xs uppercase tracking-wider font-black retro-btn press-active"
-            style={{ backgroundColor: "white" }}
-          >
-            <RotateCcw size={13} /> Re-run AI Analysis
-          </button>
+          {/* Re-run / refresh */}
+          <div className="flex gap-2">
+            {fromCache && (
+              <button
+                onClick={() => runAnalysis(true)}
+                className="flex-1 flex items-center justify-center gap-2 py-2.5 text-xs uppercase tracking-wider font-black retro-btn press-active"
+                style={{ backgroundColor: "white" }}
+              >
+                <RotateCcw size={13} /> Regenerate Fresh
+              </button>
+            )}
+            {!fromCache && (
+              <div className="flex-1 flex items-center justify-center gap-2 py-2.5 text-xs font-bold" style={{ backgroundColor: "var(--cream)", border: "2px solid var(--border)", color: "var(--muted)" }}>
+                ✓ Result saved — free next time
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

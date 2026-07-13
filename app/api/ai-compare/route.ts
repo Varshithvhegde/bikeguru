@@ -4,6 +4,11 @@ import { getServerSupabase } from "@/lib/supabase"
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
 
+// Stable cache key: sorted bike IDs joined
+function cacheKey(bike_ids: string[]): string {
+  return [...bike_ids].sort().join("_")
+}
+
 const SYSTEM = `You are a senior Indian motorcycle expert. Given specs of 2–3 bikes, produce a structured JSON comparison report for someone buying in Bangalore, Karnataka.
 
 Return ONLY valid JSON — no markdown, no explanation, just the raw object.
@@ -93,12 +98,33 @@ Scores must be 0–100. Be decisive — don't give all bikes the same score. Use
 
 export async function POST(req: NextRequest) {
   try {
-    const { bike_ids } = await req.json()
+    const { bike_ids, force_refresh, cache_only } = await req.json()
     if (!bike_ids?.length || bike_ids.length < 2) {
       return NextResponse.json({ error: "Need at least 2 bikes" }, { status: 400 })
     }
 
     const supabase = getServerSupabase()
+    const key = cacheKey(bike_ids)
+
+    // ── 1. Check cache ──
+    if (!force_refresh) {
+      const { data: cached } = await supabase
+        .from("ai_comparisons")
+        .select("report, created_at")
+        .eq("id", key)
+        .single()
+
+      if (cached) {
+        return NextResponse.json({ report: cached.report, cached: true, cached_at: cached.created_at })
+      }
+    }
+
+    // cache_only = true means "only return if cached, don't call GPT"
+    if (cache_only) {
+      return NextResponse.json({ report: null, cached: false })
+    }
+
+    // ── 2. Fetch bike specs ──
     const { data: bikes } = await supabase
       .from("bikes")
       .select("name,brand,price_on_road,price_ex_showroom,engine_cc,max_power,max_torque,mileage_kmpl,top_speed,weight_kg,ground_clearance_mm,abs,fuel_tank_liters,category,pros,cons,suitable_for,rating,seat_height_mm")
@@ -106,6 +132,7 @@ export async function POST(req: NextRequest) {
 
     if (!bikes?.length) return NextResponse.json({ error: "Bikes not found" }, { status: 404 })
 
+    // ── 3. Call GPT ──
     const prompt = `Compare these ${bikes.length} bikes for a buyer in Bangalore, Karnataka:\n\n${JSON.stringify(bikes, null, 2)}`
 
     const completion = await openai.chat.completions.create({
@@ -128,7 +155,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "GPT returned invalid JSON", raw }, { status: 500 })
     }
 
-    return NextResponse.json({ report, bikes })
+    // ── 4. Save to cache (upsert so force_refresh overwrites) ──
+    await supabase
+      .from("ai_comparisons")
+      .upsert({ id: key, bike_ids, report })
+
+    return NextResponse.json({ report, cached: false })
   } catch (err) {
     console.error("AI compare error:", err)
     return NextResponse.json({ error: String(err) }, { status: 500 })
